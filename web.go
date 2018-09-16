@@ -31,5 +31,5 @@ func main() {
 		log.Fatal(err)
 	}
 
-	s.ListenAndServe()
+	log.Fatal(s.ListenAndServe())
 }

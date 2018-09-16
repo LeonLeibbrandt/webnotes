@@ -37,6 +37,7 @@ func NewServer(g *global.Global) (*Server, error) {
 				}
 				fmt.Printf("%s -> %s\n", username, password)
 			} else {
+
 			}
 			fmt.Printf("Cookie %v\n", cookie)
 		}
