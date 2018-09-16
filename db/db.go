@@ -36,26 +36,31 @@ func NewDB(cnf *config.Config) (*DB, error) {
 			return nil, err
 		}
 	}
+	err = d.migrateDB()
+	if err != nil {
+		d.ConnPool.Close()
+		return nil, err
+	}
 	return d, nil
 }
 
 func (d *DB) Auth(username, password, ip string) (string, bool) {
 	/*
-	insert into webuser(email, session)
-	values('leon', '[]' || jsonb_build_object(
-		'ip', '192.168.1.101',
-		'cookie', crypt('leonpassword192.168.1.101', gen_salt('bf')),
-		'valid', now() + interval '24 hours')
-	);
+		insert into webuser(email, session)
+		values('leon', '[]' || jsonb_build_object(
+			'ip', '192.168.1.101',
+			'cookie', crypt('leonpassword192.168.1.101', gen_salt('bf')),
+			'valid', now() + interval '24 hours')
+		);
 
-	update webuser set session = session ||	jsonb_build_object(
-		'ip', '192.168.1.103',
-		'cookie', crypt('leonpassword192.168.1.103', gen_salt('bf')),
-		'valid', now() + interval '24 hours')
-	where _id=6
-	select w._id, (r->>'valid')::timestamp from webuser w, jsonb_array_elements(w.session) r where r->>'cookie' = crypt('leonpassword192.168.1.101', r->>'cookie')
+		update webuser set session = session ||	jsonb_build_object(
+			'ip', '192.168.1.103',
+			'cookie', crypt('leonpassword192.168.1.103', gen_salt('bf')),
+			'valid', now() + interval '24 hours')
+		where _id=6
+		select w._id, (r->>'valid')::timestamp from webuser w, jsonb_array_elements(w.session) r where r->>'cookie' = crypt('leonpassword192.168.1.101', r->>'cookie')
 
-	select * from webuser
+		select * from webuser
 	*/
 
 	var id int64

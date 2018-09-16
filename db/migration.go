@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx"
 )
@@ -22,8 +23,7 @@ func (d *DB) createDB(pgxConnPoolConfig pgx.ConnPoolConfig) error {
 	if err != nil {
 		return err
 	}
-	err = d.migrateDB()
-	return err
+	return nil
 }
 
 func (d *DB) migrateDB() error {
@@ -39,17 +39,62 @@ func (d *DB) migrateDB() error {
 		return err
 	}
 	if !exists {
+		fmt.Println("Creating version")
 		_, err := conn.Exec(versiontable)
 		if err != nil {
 			return err
 		}
 	}
-	// select to_regclass('public.version')::text is not null as exists
-	tx, err := conn.Begin()
-	if err != nil {
+
+	tableVersion := make(map[string]int)
+	rows, err := conn.Query("select name, version from version")
+	if err != nil && err != pgx.ErrNoRows {
 		return err
 	}
-	defer tx.Rollback()
+	for rows.Next() {
+		var tableName string
+		var version int
+		err = rows.Scan(&tableName, &version)
+		if err != nil {
+			return err
+		}
+		tableVersion[tableName] = version
+	}
+	for tableName := range tables {
+		version, ok := tableVersion[tableName]
+		if !ok {
+			version = -1
+		}
+		err = d.migrateTable(tableName, version, conn)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *DB) migrateTable(tableName string, currentVersion int, conn *pgx.Conn) error {
+	queries := tables[tableName]
+	if currentVersion < len(queries)-1 {
+		fmt.Printf("Migrating table %s from %d to %d\n", tableName, currentVersion, len(queries)-1)
+		var builder strings.Builder
+		builder.Reset()
+		if currentVersion == -1 {
+			builder.WriteString(fmt.Sprintf("INSERT INTO version(name, version) values('%s', -1);", tableName))
+		}
+		for indx, query := range queries {
+			if indx > currentVersion {
+				builder.WriteString(query)
+				currentVersion = indx
+			}
+		}
+		builder.WriteString(fmt.Sprintf("UPDATE version SET version=%d WHERE name='%s';", currentVersion, tableName))
+		_, err := conn.Exec(builder.String())
+		if err != nil {
+			fmt.Println(builder.String())
+			return err
+		}
+	}
 	return nil
 }
 
@@ -66,3 +111,22 @@ WITH (
 );
 ALTER TABLE public.version
     OWNER to leon;`
+
+var tables map[string][]string = map[string][]string{
+	"webuser": []string{`CREATE TABLE public.webuser
+(
+    _id bigserial NOT NULL,
+    email text COLLATE pg_catalog."default" NOT NULL,
+    session jsonb DEFAULT '[]'::jsonb,
+    CONSTRAINT webuser_pkey PRIMARY KEY (_id),
+    CONSTRAINT unq_webuser_email UNIQUE (email)
+
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+ALTER TABLE public.webuser
+    OWNER to leon;`,
+	},
+}
