@@ -1,0 +1,5 @@
+{
+	"server_port":":8080",
+	"connstr":"user=username password=password host=localhost port=5432 dbname=web sslmode=disable",
+	"template_dir":""
+}
