@@ -117,6 +117,7 @@ var tables map[string][]string = map[string][]string{
 (
     _id bigserial NOT NULL,
     email text COLLATE pg_catalog."default" NOT NULL,
+    password text  COLLATE pg_catalog."default",
     session jsonb DEFAULT '[]'::jsonb,
     CONSTRAINT webuser_pkey PRIMARY KEY (_id),
     CONSTRAINT unq_webuser_email UNIQUE (email)

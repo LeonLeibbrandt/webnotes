@@ -1,6 +1,14 @@
 package db
 
 import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"hash"
+	"strings"
+
 	"web/config"
 
 	"github.com/jackc/pgx"
@@ -10,11 +18,17 @@ type DB struct {
 	*pgx.ConnPool
 	config    *config.Config
 	pgxConfig pgx.ConnConfig
+	mac       hash.Hash
 }
+
+const (
+	SECRET = "secret key 12345"
+)
 
 func NewDB(cnf *config.Config) (*DB, error) {
 	d := &DB{
 		config: cnf,
+		mac:    hmac.New(sha256.New, []byte(SECRET)),
 	}
 	var err error
 	d.pgxConfig, err = pgx.ParseConnectionString(cnf.ConnStr)
@@ -45,6 +59,7 @@ func NewDB(cnf *config.Config) (*DB, error) {
 }
 
 func (d *DB) Auth(username, password, ip string) (string, bool) {
+	fmt.Printf("%s -> %s\n", username, password)
 	/*
 		insert into webuser(email, session)
 		values('leon', '[]' || jsonb_build_object(
@@ -65,16 +80,34 @@ func (d *DB) Auth(username, password, ip string) (string, bool) {
 
 	var id int64
 	token := ""
-	err := d.QueryRow("SELECT _id FROM webuser WHERE username=$1 and password=crypt($2, password)",
+	err := d.QueryRow("SELECT _id FROM webuser WHERE email=$1 and password=crypt($2, password)",
 		username, password).Scan(&id)
 	if err != nil {
+		fmt.Printf("At 1 %v\n", err)
 		return token, false
 	}
 	// Generate a cookie
-
+	d.mac.Reset()
+	var b bytes.Buffer
+	b.WriteString(username)
+	b.WriteString(password)
+	b.WriteString(ip)
+	d.mac.Write(b.Bytes())
+	token = hex.EncodeToString(d.mac.Sum(nil))
+	token = strings.ToUpper(token)
+	_, err = d.Exec(fmt.Sprintf("UPDATE webuser SET session = session || jsonb_build_object('ip', '%s', 'cookie', '%s') WHERE _id=%v;", ip, token, id))
+	if err != nil {
+		fmt.Printf("At 2 %v\n", err)
+		return "", false
+	}
 	return token, true
 }
 
 func (d *DB) Session(session, ip string) bool {
+	var id int64
+	err := d.QueryRow("SELECT w._id FROM webuser w, jsonb_array_elements(w.session) r where r->>'cookie' = $1 AND r->>'ip' = $2;", session, ip).Scan(&id)
+	if err != nil {
+		return false
+	}
 	return true
 }

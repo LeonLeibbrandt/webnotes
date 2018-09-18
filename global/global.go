@@ -7,7 +7,7 @@ import (
 
 type Global struct {
 	Config *config.Config
-	db     *db.DB
+	DB     *db.DB
 }
 
 func NewGlobal(cnf *config.Config) (*Global, error) {
@@ -15,7 +15,7 @@ func NewGlobal(cnf *config.Config) (*Global, error) {
 		Config: cnf,
 	}
 	var err error
-	g.db, err = db.NewDB(g.Config)
+	g.DB, err = db.NewDB(g.Config)
 	if err != nil {
 		return nil, err
 	}

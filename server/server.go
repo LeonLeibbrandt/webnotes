@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"web/global"
 )
@@ -18,6 +19,7 @@ func NewServer(g *global.Global) (*Server, error) {
 
 	getIP := func(f http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
+			fmt.Println("Getting IP")
 			r.Header.Set("IPAddress", getIPAddress(r))
 			f(w, r)
 		}
@@ -25,6 +27,7 @@ func NewServer(g *global.Global) (*Server, error) {
 
 	auth := func(f http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
+			fmt.Println("Authing")
 			// First check session cookie
 			cookie, err := r.Cookie(SESSIONKEY)
 			if err != nil {
@@ -35,11 +38,27 @@ func NewServer(g *global.Global) (*Server, error) {
 					w.Write([]byte(LOGINFORM))
 					return
 				}
-				fmt.Printf("%s -> %s\n", username, password)
-			} else {
-
+				token, known := g.DB.Auth(username, password, r.Header.Get("IPAddress"))
+				if !known {
+					http.Error(w, "Unknown User or Password Incorrect", http.StatusUnauthorized)
+					return
+				}
+				http.SetCookie(w, &http.Cookie{
+					Name:    SESSIONKEY,
+					Value:   token,
+					Path:    "/",
+					Expires: time.Now().Add(time.Hour * 24),
+				})
+				f(w, r)
+				return
 			}
-			fmt.Printf("Cookie %v\n", cookie)
+			fmt.Printf("Cookie %#+v\n", cookie)
+			known := g.DB.Session(cookie.Value, r.Header.Get("IPAddress"))
+			if !known {
+				http.Error(w, "Unknown User or Password Incorrect", http.StatusUnauthorized)
+				return
+			}
+			f(w, r)
 		}
 	}
 
@@ -48,8 +67,8 @@ func NewServer(g *global.Global) (*Server, error) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/pages", auth(getIP(s.Pages)))
-	mux.HandleFunc("/", auth(getIP(s.Pages)))
+	mux.HandleFunc("/pages", getIP(auth(s.Pages)))
+	mux.HandleFunc("/", getIP(auth(s.Pages)))
 
 	httpServer := &http.Server{
 		Addr:    g.Config.ServerPort,
@@ -61,12 +80,9 @@ func NewServer(g *global.Global) (*Server, error) {
 	return s, nil
 }
 
-func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
+func (s *Server) Pages(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("Ip Address for Login : %s\n", r.Header.Get("IPAddress"))
 	w.Write([]byte("OK"))
-}
-
-func (s *Server) Pages(w http.ResponseWriter, r *http.Request) {
 }
 
 var LOGINFORM = `<!DOCTYPE html>
